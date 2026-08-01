@@ -65,11 +65,13 @@ export function useVideoUpscaler(): UseVideoUpscalerReturn {
     const updateElapsed = () => performance.now() - startTime;
 
     try {
-      /* ─── Step 1: Load WebSR via ESM CDN and check WebGPU support ─── */
-      const WebSRModule = await import(/* @vite-ignore */ 'https://esm.sh/@websr/websr');
-      // Handle both ESM default and CJS module.exports from the UMD bundle
-      const WebSR = WebSRModule.default ?? WebSRModule;
-      const gpuDevice = await WebSR.initWebGPU();
+      /* ─── Step 1: Check global WebSR engine and WebGPU support ─── */
+      const WebSREngine = (window as any).WebSR || (window as any).websr;
+      if (!WebSREngine) {
+        throw new Error('WebSR engine failed to load from global script. Please check your network connection.');
+      }
+
+      const gpuDevice = await WebSREngine.initWebGPU();
       if (!gpuDevice) {
         throw new Error(
           'WebGPU is not supported in this browser. Please use Chrome 113+ or Edge 113+.'
@@ -119,7 +121,7 @@ export function useVideoUpscaler(): UseVideoUpscalerReturn {
       }
       const weights = await weightsResponse.json();
 
-      const websr = new WebSR({
+      const websr = new WebSREngine({
         network_name: NETWORK_NAME as any,
         weights,
         gpu: gpuDevice,
