@@ -399,42 +399,65 @@ function demuxMP4(buffer: ArrayBuffer): Promise<DemuxResult> {
 }
 
 function getCodecDescription(track: any): Uint8Array | undefined {
-  // Extract avcC/hvcC box for decoder configuration
-  const trak = track.trak;
-  if (!trak) return undefined;
+  try {
+    const trak = track.trak;
+    if (!trak) return undefined;
 
-  const stbl = trak.mdia?.minf?.stbl;
-  if (!stbl) return undefined;
+    const entry = trak.mdia?.minf?.stbl?.stsd?.entries?.[0];
+    if (!entry) return undefined;
 
-  const stsd = stbl.stsd;
-  if (!stsd || !stsd.entries || stsd.entries.length === 0) return undefined;
+    const box = entry.avcC || entry.hvcC || entry.vpcC || entry.av1C;
+    if (!box) return undefined;
 
-  const entry = stsd.entries[0];
-  const avcC = entry.avcC || entry.hvcC;
-  if (!avcC) return undefined;
+    // Use mp4box's DataStream to serialize the codec box into a buffer
+    // mp4box.DataStream is available via mp4box or window.mp4box
+    const DataStreamClass = (window as any).mp4box?.DataStream || (window as any).DataStream;
 
-  // Create a DataStream and write the box to get the raw bytes
-  const stream = new DataView(new ArrayBuffer(1024));
-  // Use the mp4box serialization if available
-  if (typeof avcC.write === 'function') {
-    const buffer = new ArrayBuffer(4096);
-    const ds = {
-      buffer,
-      byteOffset: 0,
-      position: 0,
-      writeUint8: function(v: number) { new DataView(this.buffer).setUint8(this.position++, v); },
-    };
-    try {
-      avcC.write(ds);
-      return new Uint8Array(buffer, 0, ds.position);
-    } catch {
-      // Fallback
+    if (DataStreamClass) {
+      const stream = new DataStreamClass(undefined, 0, DataStreamClass.BIG_ENDIAN);
+      box.write(stream);
+      // The box write output includes 8 bytes box header (4 bytes size + 4 bytes fourcc)
+      // WebCodecs description property expects ONLY the payload (avcC/hvcC contents)
+      return new Uint8Array(stream.buffer, 8, stream.position - 8);
     }
-  }
 
-  // Fallback: try to get the data directly
-  if (avcC.data) {
-    return new Uint8Array(avcC.data);
+    // Fallback: manually construct avcC box if stream class isn't available on window
+    if (box.write) {
+      const buffer = new ArrayBuffer(4096);
+      const view = new DataView(buffer);
+      let pos = 0;
+
+      const mockStream = {
+        buffer,
+        position: 0,
+        writeUint8: (v: number) => view.setUint8(mockStream.position++, v),
+        writeUint16: (v: number) => { view.setUint16(mockStream.position, v, false); mockStream.position += 2; },
+        writeUint24: (v: number) => {
+          view.setUint8(mockStream.position++, (v >> 16) & 0xff);
+          view.setUint16(mockStream.position, v & 0xffff, false);
+          mockStream.position += 2;
+        },
+        writeUint32: (v: number) => { view.setUint32(mockStream.position, v, false); mockStream.position += 4; },
+        writeBytes: (arr: Uint8Array) => {
+          new Uint8Array(buffer, mockStream.position, arr.length).set(arr);
+          mockStream.position += arr.length;
+        },
+        writeString: (str: string) => {
+          for (let i = 0; i < str.length; i++) view.setUint8(mockStream.position++, str.charCodeAt(i));
+        },
+      };
+
+      box.write(mockStream);
+      if (mockStream.position > 8) {
+        return new Uint8Array(buffer, 8, mockStream.position - 8);
+      }
+    }
+
+    if (box.data) {
+      return new Uint8Array(box.data);
+    }
+  } catch (err) {
+    console.warn('Could not extract codec description header:', err);
   }
 
   return undefined;
