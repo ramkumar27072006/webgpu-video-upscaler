@@ -106,6 +106,12 @@ export function useVideoUpscaler(): UseVideoUpscalerReturn {
       }));
 
       /* ─── Step 4: Setup preview canvas ─── */
+      let retries = 20;
+      while (!previewCanvasRef.current && retries > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        retries--;
+      }
+
       const canvas = previewCanvasRef.current;
       if (!canvas) throw new Error('Preview canvas not mounted');
       const outputWidth = info.width * SCALE_FACTOR;
