@@ -65,8 +65,8 @@ export function useVideoUpscaler(): UseVideoUpscalerReturn {
     const updateElapsed = () => performance.now() - startTime;
 
     try {
-      /* ─── Step 1: Load WebSR and check WebGPU support ─── */
-      const WebSRModule = await import('@websr/websr');
+      /* ─── Step 1: Load WebSR via ESM CDN and check WebGPU support ─── */
+      const WebSRModule = await import(/* @vite-ignore */ 'https://esm.sh/@websr/websr');
       // Handle both ESM default and CJS module.exports from the UMD bundle
       const WebSR = WebSRModule.default ?? WebSRModule;
       const gpuDevice = await WebSR.initWebGPU();
