@@ -7,15 +7,15 @@
 ![WebGPU](https://img.shields.io/badge/WebGPU-000000?style=flat&logo=webgpu&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=flat&logo=tailwind-css&logoColor=white)
 
-## ✨ Features
+##  Features
 
-- **🎮 WebGPU-Powered** — Leverages your GPU for real-time AI video upscaling
-- **🔒 100% Client-Side** — All processing happens locally in your browser. No data ever leaves your device.
-- **🎬 2× Resolution** — Upscales video to double the original resolution using neural network inference
-- **📊 Real-Time Metrics** — Live FPS, frame count, and progress tracking
-- **🎨 Premium UI** — Glassmorphism design with Framer Motion animations
+- **WebGPU-Powered** — Leverages your GPU for real-time AI video upscaling
+- **100% Client-Side** — All processing happens locally in your browser. No data ever leaves your device.
+- **2× Resolution** — Upscales video to double the original resolution using neural network inference
+- **Real-Time Metrics** — Live FPS, frame count, and progress tracking
+- **Premium UI** — Glassmorphism design with Framer Motion animations
 
-## 🛠 Tech Stack
+##  Tech Stack
 
 | Category | Technology |
 |----------|-----------|
@@ -30,7 +30,7 @@
 | Video Muxing | mp4-muxer |
 | GPU Compute | WebGPU API |
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 
@@ -59,7 +59,7 @@ npm run build
 npm run preview
 ```
 
-## 🔄 Processing Pipeline
+##  Processing Pipeline
 
 ```
 MP4 File → mp4box (Demux)
@@ -70,7 +70,7 @@ MP4 File → mp4box (Demux)
           → Download Blob
 ```
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 src/
@@ -93,7 +93,7 @@ src/
 └── index.css                  # Tailwind + custom animations
 ```
 
-## ⚠️ Browser Compatibility
+##  Browser Compatibility
 
 | Browser | WebGPU | WebCodecs | Status |
 |---------|--------|-----------|--------|
@@ -102,6 +102,6 @@ src/
 | Firefox | ❌ | ⚠️ | Not Supported |
 | Safari | ⚠️ | ⚠️ | Partial |
 
-## 📄 License
+##  License
 
 MIT
