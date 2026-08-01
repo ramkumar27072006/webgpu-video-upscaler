@@ -119,13 +119,26 @@ export function useVideoUpscaler(): UseVideoUpscalerReturn {
       canvas.width = outputWidth;
       canvas.height = outputHeight;
 
-      /* ─── Step 5: Initialize WebSR ─── */
-      const weightsUrl = `https://cdn.jsdelivr.net/npm/@websr/websr@latest/weights/${NETWORK_NAME.replace('/', '_')}.json`;
-      const weightsResponse = await fetch(weightsUrl);
-      if (!weightsResponse.ok) {
-        throw new Error(`Failed to fetch WebSR weights: ${weightsResponse.statusText}`);
+      /* ─── Step 5: Initialize WebSR weights ─── */
+      let weights: any = null;
+      const localWeightsUrl = `/weights/${NETWORK_NAME}.json`;
+      const fallbackWeightsUrl = `/weights/${NETWORK_NAME}-an.json`;
+
+      try {
+        const res = await fetch(localWeightsUrl);
+        if (res.ok) weights = await res.json();
+      } catch {
+        // Fallback to -an variant
       }
-      const weights = await weightsResponse.json();
+
+      if (!weights) {
+        const res = await fetch(fallbackWeightsUrl);
+        if (res.ok) {
+          weights = await res.json();
+        } else {
+          throw new Error(`Failed to load WebSR neural network weights`);
+        }
+      }
 
       const websr = new WebSREngine({
         network_name: NETWORK_NAME as any,
