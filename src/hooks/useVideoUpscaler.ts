@@ -78,6 +78,22 @@ export function useVideoUpscaler(): UseVideoUpscalerReturn {
         );
       }
 
+      /* ─── Step 1b: Extract guaranteed video dimensions via HTML5 Video element ─── */
+      const { safeWidth, safeHeight } = await new Promise<{ safeWidth: number; safeHeight: number }>((resolve) => {
+        const tempVideo = document.createElement('video');
+        tempVideo.onloadedmetadata = () => {
+          resolve({
+            safeWidth: tempVideo.videoWidth,
+            safeHeight: tempVideo.videoHeight,
+          });
+          URL.revokeObjectURL(tempVideo.src);
+        };
+        tempVideo.onerror = () => {
+          resolve({ safeWidth: 0, safeHeight: 0 });
+        };
+        tempVideo.src = URL.createObjectURL(file);
+      });
+
       /* ─── Step 2: Read file into ArrayBuffer ─── */
       setMetrics((m) => ({ ...m, currentStep: 'Reading file…', elapsedMs: updateElapsed() }));
       const fileBuffer = await file.arrayBuffer();
@@ -87,10 +103,13 @@ export function useVideoUpscaler(): UseVideoUpscalerReturn {
 
       const { videoTrack, samples } = await demuxMP4(fileBuffer);
 
+      const finalWidth = safeWidth || videoTrack.width || 1920;
+      const finalHeight = safeHeight || videoTrack.height || 1080;
+
       const info: VideoInfo = {
         name: file.name,
-        width: videoTrack.width,
-        height: videoTrack.height,
+        width: finalWidth,
+        height: finalHeight,
         duration: videoTrack.duration / videoTrack.timescale,
         frameCount: videoTrack.nb_samples,
         fps: videoTrack.nb_samples / (videoTrack.duration / videoTrack.timescale),
@@ -114,8 +133,8 @@ export function useVideoUpscaler(): UseVideoUpscalerReturn {
 
       const canvas = previewCanvasRef.current;
       if (!canvas) throw new Error('Preview canvas not mounted');
-      const outputWidth = info.width * SCALE_FACTOR;
-      const outputHeight = info.height * SCALE_FACTOR;
+      const outputWidth = Math.round(finalWidth * SCALE_FACTOR);
+      const outputHeight = Math.round(finalHeight * SCALE_FACTOR);
       canvas.width = outputWidth;
       canvas.height = outputHeight;
 
