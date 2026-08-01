@@ -101,7 +101,7 @@ export function useVideoUpscaler(): UseVideoUpscalerReturn {
       /* ─── Step 3: Demux with mp4box ─── */
       setMetrics((m) => ({ ...m, currentStep: 'Demuxing MP4…', elapsedMs: updateElapsed() }));
 
-      const { videoTrack, samples } = await demuxMP4(fileBuffer);
+      const { videoTrack, samples, mp4File } = await demuxMP4(fileBuffer);
 
       const finalWidth = safeWidth || videoTrack.width || 1920;
       const finalHeight = safeHeight || videoTrack.height || 1080;
@@ -252,8 +252,8 @@ export function useVideoUpscaler(): UseVideoUpscalerReturn {
         },
       });
 
-      // Find the codec string from the track info
-      const codecDesc = getCodecDescription(videoTrack);
+      // Find the codec description from the moov.traks stsd entry
+      const codecDesc = getCodecDescription(videoTrack, mp4File);
       decoder.configure({
         codec: videoTrack.codec,
         codedWidth: videoTrack.width,
@@ -354,6 +354,7 @@ export function useVideoUpscaler(): UseVideoUpscalerReturn {
 interface DemuxResult {
   videoTrack: any;
   samples: Sample[];
+  mp4File: ISOFile;
 }
 
 function demuxMP4(buffer: ArrayBuffer): Promise<DemuxResult> {
@@ -382,7 +383,7 @@ function demuxMP4(buffer: ArrayBuffer): Promise<DemuxResult> {
       // Check if we have all samples
       if (videoTrack && allSamples.length >= videoTrack.nb_samples) {
         mp4File.stop();
-        resolve({ videoTrack, samples: allSamples });
+        resolve({ videoTrack, samples: allSamples, mp4File });
       }
     };
 
@@ -398,63 +399,35 @@ function demuxMP4(buffer: ArrayBuffer): Promise<DemuxResult> {
   });
 }
 
-function getCodecDescription(track: any): Uint8Array | undefined {
+function getCodecDescription(videoTrack: any, mp4File?: any): Uint8Array | undefined {
   try {
-    const trak = track.trak;
-    if (!trak) return undefined;
-
-    const entry = trak.mdia?.minf?.stbl?.stsd?.entries?.[0];
-    if (!entry) return undefined;
-
-    const box = entry.avcC || entry.hvcC || entry.vpcC || entry.av1C;
-    if (!box) return undefined;
-
-    // Use mp4box's DataStream to serialize the codec box into a buffer
-    // mp4box.DataStream is available via mp4box or window.mp4box
-    const DataStreamClass = (window as any).mp4box?.DataStream || (window as any).DataStream;
-
-    if (DataStreamClass) {
-      const stream = new DataStreamClass(undefined, 0, DataStreamClass.BIG_ENDIAN);
-      box.write(stream);
-      // The box write output includes 8 bytes box header (4 bytes size + 4 bytes fourcc)
-      // WebCodecs description property expects ONLY the payload (avcC/hvcC contents)
-      return new Uint8Array(stream.buffer, 8, stream.position - 8);
-    }
-
-    // Fallback: manually construct avcC box if stream class isn't available on window
-    if (box.write) {
-      const buffer = new ArrayBuffer(4096);
-      const view = new DataView(buffer);
-      let pos = 0;
-
-      const mockStream = {
-        buffer,
-        position: 0,
-        writeUint8: (v: number) => view.setUint8(mockStream.position++, v),
-        writeUint16: (v: number) => { view.setUint16(mockStream.position, v, false); mockStream.position += 2; },
-        writeUint24: (v: number) => {
-          view.setUint8(mockStream.position++, (v >> 16) & 0xff);
-          view.setUint16(mockStream.position, v & 0xffff, false);
-          mockStream.position += 2;
-        },
-        writeUint32: (v: number) => { view.setUint32(mockStream.position, v, false); mockStream.position += 4; },
-        writeBytes: (arr: Uint8Array) => {
-          new Uint8Array(buffer, mockStream.position, arr.length).set(arr);
-          mockStream.position += arr.length;
-        },
-        writeString: (str: string) => {
-          for (let i = 0; i < str.length; i++) view.setUint8(mockStream.position++, str.charCodeAt(i));
-        },
-      };
-
-      box.write(mockStream);
-      if (mockStream.position > 8) {
-        return new Uint8Array(buffer, 8, mockStream.position - 8);
+    // 1. Direct moov.traks extraction using mp4File instance
+    if (mp4File?.moov?.traks) {
+      const trak = mp4File.moov.traks.find((t: any) => t.mdia?.minf?.stbl?.stsd?.entries?.[0]?.avcC);
+      if (trak) {
+        const avcC = trak.mdia.minf.stbl.stsd.entries[0].avcC;
+        const DataStreamClass = (window as any).mp4box?.DataStream || (window as any).DataStream;
+        if (DataStreamClass && avcC?.write) {
+          const stream = new DataStreamClass(undefined, 0, DataStreamClass.BIG_ENDIAN);
+          avcC.write(stream);
+          return new Uint8Array(stream.buffer, 8, stream.position - 8);
+        }
       }
     }
 
-    if (box.data) {
-      return new Uint8Array(box.data);
+    // 2. Track object fallback
+    const trak = videoTrack?.trak;
+    if (trak) {
+      const entry = trak.mdia?.minf?.stbl?.stsd?.entries?.[0];
+      const box = entry?.avcC || entry?.hvcC || entry?.vpcC || entry?.av1C;
+      if (box) {
+        const DataStreamClass = (window as any).mp4box?.DataStream || (window as any).DataStream;
+        if (DataStreamClass && box.write) {
+          const stream = new DataStreamClass(undefined, 0, DataStreamClass.BIG_ENDIAN);
+          box.write(stream);
+          return new Uint8Array(stream.buffer, 8, stream.position - 8);
+        }
+      }
     }
   } catch (err) {
     console.warn('Could not extract codec description header:', err);
